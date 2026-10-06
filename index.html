@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clicker Mania</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #17172b, #25255a);
+    color: white;
+    min-height: 100vh;
+  }
+  .game {
+    max-width: 1050px;
+    margin: auto;
+    padding: 24px;
+  }
+  h1 { text-align: center; margin: 0 0 8px; }
+  .subtitle { text-align: center; color: #bfc3ff; margin-bottom: 20px; }
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .stat {
+    background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 14px;
+    padding: 12px 22px;
+    min-width: 170px;
+    text-align: center;
+  }
+  .stat strong { display:block; font-size: 26px; margin-top: 4px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 22px;
+  }
+  .panel {
+    background: rgba(15,15,35,.8);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px;
+    padding: 22px;
+    box-shadow: 0 15px 40px rgba(0,0,0,.25);
+  }
+  .click-area { text-align:center; }
+  #clickButton {
+    width: 230px;
+    height: 230px;
+    border-radius: 50%;
+    border: 8px solid #fff;
+    background: radial-gradient(circle at 35% 30%, #ffe66d, #ff9f1c 55%, #e85d04);
+    color: #301b00;
+    font-size: 30px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 12px 0 #a83d00, 0 20px 40px rgba(0,0,0,.35);
+    transition: transform .08s;
+    user-select: none;
+  }
+  #clickButton:active { transform: translateY(8px); box-shadow: 0 4px 0 #a83d00; }
+  .floating {
+    position: fixed;
+    pointer-events:none;
+    font-weight:bold;
+    color:#ffe66d;
+    animation: floatUp .8s ease-out forwards;
+  }
+  @keyframes floatUp {
+    from { opacity:1; transform:translate(-50%,0) scale(1); }
+    to { opacity:0; transform:translate(-50%,-90px) scale(1.3); }
+  }
+  .shop-title { margin-top:0; }
+  .item {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:rgba(255,255,255,.06);
+    border-radius:14px;
+    padding:13px;
+    margin:10px 0;
+  }
+  .icon { font-size: 34px; width: 45px; text-align:center; }
+  .info { flex:1; }
+  .info b { font-size:17px; }
+  .info small { display:block; color:#aaaee0; margin-top:3px; }
+  .buy {
+    border:0;
+    border-radius:10px;
+    padding:10px 12px;
+    background:#6c63ff;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+  }
+  .buy:hover { background:#8179ff; }
+  .buy:disabled { background:#44445c; color:#888; cursor:not-allowed; }
+  .reset {
+    margin-top:18px;
+    border:1px solid #666;
+    background:transparent;
+    color:#bbb;
+    border-radius:10px;
+    padding:8px 12px;
+    cursor:pointer;
+  }
+  .message { text-align:center; min-height:24px; color:#9ff3c8; }
+  @media(max-width:750px) {
+    .layout { grid-template-columns:1fr; }
+    #clickButton { width:190px; height:190px; }
+  }
+</style>
+</head>
+<body>
+<div class="game">
+  <h1>🖱️ Clicker Mania</h1>
+  <div class="subtitle">Haz clic, gana monedas y compra objetos para producir cada vez más.</div>
+
+  <div class="stats">
+    <div class="stat">💰 Monedas<strong id="coins">0</strong></div>
+    <div class="stat">⚡ Por clic<strong id="perClick">1</strong></div>
+    <div class="stat">🏭 Por segundo<strong id="perSecond">0</strong></div>
+  </div>
+
+  <div class="layout">
+    <section class="panel click-area">
+      <h2>¡Haz clic!</h2>
+      <button id="clickButton">CLIC</button>
+      <p class="message" id="message"></p>
+      <button class="reset" id="reset">Reiniciar partida</button>
+    </section>
+
+    <section class="panel">
+      <h2 class="shop-title">🛒 Tienda</h2>
+      <div id="shop"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const items = [
+  { id:"dedo", icon:"👆", name:"Dedo de acero", desc:"+1 moneda por clic", base:15, click:1, cps:0 },
+  { id:"raton", icon:"🖱️", name:"Ratón turbo", desc:"+5 monedas por segundo", base:60, click:0, cps:5 },
+  { id:"teclado", icon:"⌨️", name:"Teclado mágico", desc:"+5 monedas por clic", base:150, click:5, cps:0 },
+  { id:"bot", icon:"🤖", name:"Bot automático", desc:"+20 monedas por segundo", base:400, click:0, cps:20 },
+  { id:"servidor", icon:"🖥️", name:"Servidor de oro", desc:"+100 monedas por segundo", base:1500, click:0, cps:100 },
+  { id:"cohete", icon:"🚀", name:"Cohete millonario", desc:"+50 monedas por clic", base:5000, click:50, cps:0 }
+];
+
+let coins = Number(localStorage.getItem("clickerCoins")) || 0;
+let owned = JSON.parse(localStorage.getItem("clickerOwned") || "{}");
+
+function cost(item) {
+  const n = owned[item.id] || 0;
+  return Math.floor(item.base * Math.pow(1.18, n));
+}
+
+function totals() {
+  let click = 1, cps = 0;
+  for (const item of items) {
+    const n = owned[item.id] || 0;
+    click += item.click * n;
+    cps += item.cps * n;
+  }
+  return { click, cps };
+}
+
+function save() {
+  localStorage.setItem("clickerCoins", coins);
+  localStorage.setItem("clickerOwned", JSON.stringify(owned));
+}
+
+function format(n) {
+  if (n < 1000) return Math.floor(n).toString();
+  const units = ["K","M","B","T"];
+  let i = -1;
+  while (n >= 1000 && i < units.length-1) { n /= 1000; i++; }
+  return n.toFixed(n < 10 ? 1 : 0) + units[i];
+}
+
+function render() {
+  const t = totals();
+  document.getElementById("coins").textContent = format(coins);
+  document.getElementById("perClick").textContent = format(t.click);
+  document.getElementById("perSecond").textContent = format(t.cps);
+
+  document.getElementById("shop").innerHTML = items.map(item => {
+    const n = owned[item.id] || 0;
+    const c = cost(item);
+    return `
+      <div class="item">
+        <div class="icon">${item.icon}</div>
+        <div class="info">
+          <b>${item.name} ×${n}</b>
+          <small>${item.desc}</small>
+        </div>
+        <button class="buy" onclick="buy('${item.id}')" ${coins < c ? "disabled" : ""}>
+          💰 ${format(c)}
+        </button>
+      </div>`;
+  }).join("");
+}
+
+function buy(id) {
+  const item = items.find(x => x.id === id);
+  const c = cost(item);
+  if (coins >= c) {
+    coins -= c;
+    owned[id] = (owned[id] || 0) + 1;
+    save();
+    render();
+    document.getElementById("message").textContent = `¡Has comprado ${item.name}!`;
+    setTimeout(() => document.getElementById("message").textContent = "", 1200);
+  }
+}
+
+document.getElementById("clickButton").addEventListener("click", (e) => {
+  const t = totals();
+  coins += t.click;
+  save();
+  render();
+
+  const pop = document.createElement("div");
+  pop.className = "floating";
+  pop.textContent = "+" + t.click;
+  pop.style.left = e.clientX + "px";
+  pop.style.top = e.clientY + "px";
+  document.body.appendChild(pop);
+  setTimeout(() => pop.remove(), 800);
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  if (confirm("¿Seguro que quieres borrar tu progreso?")) {
+    coins = 0;
+    owned = {};
+    save();
+    render();
+  }
+});
+
+setInterval(() => {
+  const cps = totals().cps;
+  if (cps > 0) {
+    coins += cps;
+    save();
+    render();
+  }
+}, 1000);
+
+render();
+</script>
+</body>
+</html>
